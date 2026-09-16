@@ -17,7 +17,7 @@ class InfraConfig:
     reranker: object = field(default_factory=lambda: reranker_config)
     mcp: object = field(default_factory=lambda: mcp_config)
     milvus: object = field(default_factory=lambda: milvus_config)
-    mineru: object = field(default_factory=lambda: mineru_config)
+    mineru_config: object = field(default_factory=lambda: mineru_config)
     minio: object = field(default_factory=lambda: minio_config)
 
 infra_config = InfraConfig()
