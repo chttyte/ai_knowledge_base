@@ -1,3 +1,4 @@
+import shutil
 from os import PathLike
 from urllib import request
 
@@ -5,6 +6,8 @@ import requests
 import time
 
 from langchain_community.embeddings import TitanTakeoffEmbed
+from s3transfer import download
+from torchvision.datasets.utils import download_and_extract_archive
 
 from app.process.import_.agent.state import ImportGraphState
 from pathlib import Path
@@ -158,6 +161,69 @@ def upload_pdf_and_poll(pdf_path_obj: Path) -> str:
             time.sleep(MINERU_POLL_INTERVAL_SECONDS)
             continue
 
+
+def download_and_extract_markdown(zip_url:str, local_dir_obj:Path , file_name:str) -> Path:
+    """
+        进行地址下载和解压，以及重命名，最终返回md_path_obj
+    :param zip_url:
+    :param local_dir_obj:
+    :param file_name:
+    :return:
+    """
+    # 1. 下载（3次重试）
+    response = requests.get(url=zip_url, timeout=MINERU_POLL_TIMEOUT_SECONDS)
+    # 文件服务器，只需检查status_code
+    if response.status_code != 200:
+        logger.error(f"向指定地址：{zip_url}下载zip文件报错，状态码：{response.status_code}"
+                     f"业务无法继续进行！")
+    #准备zip文件对象
+    zip_path_obj:Path = local_dir_obj / f"{file_name}.zip"
+    """
+        response
+            .status_code
+            .json()  服务器返回的json字符串 -> dict
+            .text    服务器返回的json字符串 -> str -> json.loads
+            .content 服务器返回的字节数据
+    """
+    zip_path_obj.write_bytes(response.content)
+    # 2. 解压
+    # 创建一个解压后的文件夹 output / 文件名
+    zip_extract_dir:Path = local_dir_obj / file_name
+    if zip_extract_dir.is_dir():
+        # 解压过，清空，避免脏数据'
+        # shutil.rmtree -> 递归清空 清空文件夹和文件本身
+        shutil.rmtree(zip_extract_dir)
+        zip_extract_dir.mkdir(parents=True, exist_ok=True)
+        # 解压
+        # unpack_archive 支持所有格式的压缩包
+    shutil.unpack_archive(zip_path_obj, zip_extract_dir)
+    # 3. 重命名
+    # 找到文件夹的指定类型.md
+    md_obj_list: list[Path] = list(zip_extract_dir.rglob("*.md")) # 递归搜索
+    if len(md_obj_list) == 0:
+        logger.error(f"解压后发现没有md文件，业务无法继续进行！")
+        raise ValueError(f"解压后发现没有md文件，业务无法继续进行！")
+    # 情况1：就是文件名 -> return
+    for current_md_obj in md_obj_list:
+        if current_md_obj.stem == file_name:
+            logger.info(f"解压后的文件名，等于原文件名{file_name}，直接返回！")
+            return current_md_obj
+    # 情况2：full ->记录
+    md_obj_path: Path = None
+    for current_md_obj in md_obj_list:
+        if current_md_obj.stem == 'full':
+            md_obj_path = current_md_obj
+            break
+    # 情况3：xxx -> 记录
+    if not md_obj_path:
+        md_obj_path = md_obj_list[0]
+    logger.info(f"触发了md文件的重命名机制，原名称：{md_obj_path.stem}, 目标名称：{file_name}")
+    # md_obj_path.rename(f"{file_name}.md")
+    md_obj_path = md_obj_path.rename(md_obj_path.with_name(f"{file_name}.md"))
+    return md_obj_path
+
+
+
 def parse_pdf_to_markdown(state: ImportGraphState) -> ImportGraphState:
     """
     PDF 解析服务：
@@ -170,4 +236,7 @@ def parse_pdf_to_markdown(state: ImportGraphState) -> ImportGraphState:
     pdf_path_obj, local_dir_obj = validate_pdf_paths(state)
     # 2. minerU解析pdf文件并返回zip的下载地址
     zip_url: str = upload_pdf_and_poll(pdf_path_obj)
+    # 3. 根据zip_url下载并解压md文件
+    md_path_obj: Path = download_and_extract_markdown(zip_url, local_dir_obj, pdf_path_obj.stem)
+    state['md_path'] = str(md_path_obj)
     return state
