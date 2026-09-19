@@ -239,4 +239,6 @@ def parse_pdf_to_markdown(state: ImportGraphState) -> ImportGraphState:
     # 3. 根据zip_url下载并解压md文件
     md_path_obj: Path = download_and_extract_markdown(zip_url, local_dir_obj, pdf_path_obj.stem)
     state['md_path'] = str(md_path_obj)
+    state['md_content'] = md_path_obj.read_text()
+    state['local_dir'] = str(local_dir_obj)
     return state
