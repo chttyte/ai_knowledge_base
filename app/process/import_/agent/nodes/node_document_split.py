@@ -1,4 +1,5 @@
-from app.shared.runtime.logger import node_log
+import os
+from app.shared.runtime.logger import node_log, logger
 from app.shared.utils.task_utils import add_done_task, add_running_task
 from app.process.import_.agent.state import ImportGraphState
 from app.rag.import_.split_service import split_document
@@ -15,18 +16,27 @@ def node_document_split(state: ImportGraphState) -> ImportGraphState:
     return state
 
 
-if __name__ == "__main__":
-    # 手测：拿 测试数据/ 下的三份假数据跑 split_by_titles，看日志和输出
-    # 跑法：PYTHONPATH=. .venv/Scripts/python.exe app/process/import_/agent/nodes/node_document_split.py
-    # 预期输出见 测试数据/预期结果.md
-    from app.shared.runtime.logger import PROJECT_ROOT
-    from app.rag.import_.split_service import split_by_titles
+if __name__ == '__main__':
+    from app.shared.utils.path_util import PROJECT_ROOT
+    from app.process.import_.agent.nodes.node_md_img import node_md_img
 
-    data_dir = PROJECT_ROOT / "app" / "process" / "import_" / "agent" / "nodes" / "测试数据"
+    logger.info(f"本地测试 - 项目根目录：{PROJECT_ROOT}")
 
-    for name in ["切分测试.md", "无标题.md", "围栏没配对.md"]:
-        md = (data_dir / name).read_text(encoding="utf-8")
-        chunks = split_by_titles(md, name[:-3])
-        print(f"\n===== {name} → {len(chunks)} 块 =====")
-        for i, c in enumerate(chunks):
-            print(f"  [{i}] {c['title']!r}  {c['content'][:60]!r}")
+    test_md_name = os.path.join(r"output\hak180使用说明书", "hak180使用说明书.md")
+    test_md_path = os.path.join(PROJECT_ROOT, test_md_name)
+
+    if not os.path.exists(test_md_path):
+        logger.error(f"本地测试 - 测试文件不存在：{test_md_path}")
+        logger.info("请检查文件路径，或手动将测试MD文件放入项目根目录的output目录下")
+    else:
+        test_state = {
+            "md_path": test_md_path,
+            "task_id": "test_task_123456",
+            "md_content": "",
+            "file_title": "hak180使用说明书",
+            "local_dir": os.path.join(PROJECT_ROOT, "output"),
+        }
+        result_state = node_md_img(test_state)
+        final_state = node_document_split(result_state)
+        final_chunks = final_state.get("chunks", [])
+        logger.info(f"测试成功：最终生成{len(final_chunks)}个有效Chunk")

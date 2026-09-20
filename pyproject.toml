@@ -35,8 +35,8 @@ dependencies = [
     "langchain-mcp-adapters>=0.2.2",
     "dashscope>=1.25.17",
 ]
-# 项目下配置环境变量(更推荐)
+# 使用官方 PyPI，避免第三方镜像中的包文件过期或返回 403。
 [[tool.uv.index]]
-name = "tsinghua"
-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+name = "pypi"
+url = "https://pypi.org/simple"
 default = true

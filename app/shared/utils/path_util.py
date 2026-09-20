@@ -2,10 +2,10 @@
 应用主包 / 工具模块中的 path_util 模块，负责承载对应场景的具体实现逻辑。
 """
 # app/shared/utils/path_util.py
-from pathlib import Path
-from dotenv import load_dotenv
 import os
 from pathlib import Path
+
+from dotenv import load_dotenv
 
 def get_path_dir(ps:int = 0)->Path:
     """
@@ -22,28 +22,23 @@ def get_path_dir(ps:int = 0)->Path:
     return dir_path
 
 
-def get_project_root(identifier: str = ".env") -> Path:
-    # 第一步：优先读取环境变量（生产环境用）
+def get_project_root(identifier: str = "pyproject.toml") -> Path:
+    """返回项目根目录，允许通过 PROJECT_ROOT 环境变量覆盖。"""
     env_root = os.getenv("PROJECT_ROOT")
-    if env_root and Path(env_root).absolute().exists():
-        return Path(env_root).absolute()
+    if env_root:
+        configured_root = Path(env_root).expanduser().resolve()
+        if configured_root.is_dir():
+            return configured_root
 
-    # 第二步：加载根目录的.env文件（为了后续逻辑，也可省略）
-    current_dir = Path(__file__).absolute().parent
-    while current_dir != current_dir.parent:
-        if (current_dir / identifier).exists():
-            load_dotenv(dotenv_path=current_dir / identifier)
-            break
-        current_dir = current_dir.parent
-
-    # 第三步：递归查找标识（兜底，开发环境用）
-    current_dir = Path(__file__).absolute().parent
-    while current_dir != current_dir.parent:
-        if (current_dir / identifier).exists():
+    start_dir = Path(__file__).resolve().parent
+    for current_dir in (start_dir, *start_dir.parents):
+        if (current_dir / identifier).is_file():
+            load_dotenv(dotenv_path=current_dir / ".env")
             return current_dir
-        current_dir = current_dir.parent
 
-    raise FileNotFoundError(f"未找到项目根目录标识「{identifier}」，且环境变量PROJECT_ROOT未配置")
+    raise FileNotFoundError(
+        f"未找到项目根目录标识「{identifier}」，且环境变量 PROJECT_ROOT 未配置"
+    )
 
 
-PROJECT_ROOT = get_project_root(".env")
+PROJECT_ROOT = get_project_root()

@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -6,13 +7,125 @@ from app.process.import_.agent.state import ImportGraphState
 from app.rag.import_.config import CHUNK_MAX_SIZE, CHUNK_SIZE
 from app.shared.runtime.logger import logger, step_log
 
+def backup_chunks(chunks: list[dict], md_path: str) -> None:
+    """
+       备份文档切块结果到本地 JSON 文件
+       作用：持久化保存切块数据，方便调试、校验、回溯，避免重复处理
+       :param chunks: 文档切块后的列表数据
+       :param md_path: 原始 Markdown 文件路径（用于确定保存目录）
+    """
+    chunks_json_path = Path(md_path).parent / "chunks.json"
+
+    chunks_json_path.write_text(json.dumps(chunks, ensure_ascii=False, indent=4), encoding="utf-8")
+
+
+
+@step_log("refine_chunks")
+def refine_chunks(
+    sections: list[dict],
+    max_len: int = CHUNK_MAX_SIZE,
+    min_len: int = CHUNK_SIZE,
+) -> list[dict]:
+    """
+    【切块精细化处理】RAG 核心优化步骤
+    作用：把按标题切好的块，进一步调整成【长度标准、适合入库】的块
+    流程：
+        1. 太长的块 → 拆分（不超过 max_len）
+        2. 太短的块 → 合并（不低于 min_len）
+        3. 统一补全字段（part、parent_title）
+    返回：最终标准、可用的切块列表
+    """
+    if not max_len or (max_len <= 0):
+        logger.warning(f"步骤4：Chunk最大长度配置无效（{max_len}），跳过精细化处理")
+        return sections
+
+        # 存储处理后的中间切块
+    refined_split: list[dict] = []
+    # 遍历所有按标题切好的块(一个章节一个章节处理)
+    for sec in sections:
+        refined_split.extend(_split_long_section(sec, max_len))
+
+    final_sections = _merge_short_sections(refined_split,min_length=min_len, max_length=max_len)
+
+    # 统一给所有块补上字段（方便后续检索、溯源、展示）
+    for sec in final_sections:
+        # 给切块编号：同一标题下的第 N 部分，默认 0
+        if "part" not in sec:
+            sec["part"] = 0
+        if not sec.get("parent_title"):
+            sec["parent_title"] = sec.get("title") or ""
+
+    return final_sections
+
 def _merge_short_sections(
-    section: list[dict],
+    sections: list[dict],
     min_length: int = CHUNK_SIZE,
     max_length: int = CHUNK_MAX_SIZE,
 )-> list[dict]:
+    """
+       内部工具函数：合并【过短的文本块】，避免碎篇内容
+       核心规则：
+           1. 只有长度 < 最小长度 的短块才会被合并
+           2. 必须是**同一个父标题/章节**下的内容才会合并（保证语义相关）
+           3. 合并后不能超过最大长度，避免再次超长
+           4. 自动去重重复标题，保证内容干净
+       :param sections: 待合并的文本块列表
+       :param min_length: 最小长度阈值，低于此值视为短块
+       :param max_length: 最大长度阈值，合并后不能超限
+       :return: 合并完成后的规整文本块列表
+    """
+    # 空列表直接返回
+    if not sections:
+        return []
 
-    return None
+    # 存储最终合并完成的块
+    merged_sections = []
+
+    # 当前正在累积合并的块
+    current_chunk = None
+
+    for sec in sections:
+        # 初始化，直接拿一个文本块
+        if current_chunk is None:
+            current_chunk = sec
+            continue
+        # 获取当前块的内容
+        current_content = current_chunk.get("content", "")
+
+        is_current_short = len(current_content) < min_length
+        is_same_parent = current_chunk.get("parent_title") == sec.get("parent_title")
+
+        # ===================== 满足条件：执行合并 =====================
+        if is_current_short and is_same_parent:
+            parent_title = sec.get("parent_title", "")
+            next_content = sec["content"]
+
+            # 如果下一个块内容以父标题开头，剔除重复标题，避免冗余
+            if parent_title and next_content.startswith(parent_title):
+                next_content = next_content[len(parent_title) :].lstrip()
+
+            merged_content = current_content + "\n\n" + next_content
+
+            # 判断：合并后是否会超过最大长度限制
+            will_exceed_max = (max_length > 0) and  (len(merged_content) > max_length)
+
+            if will_exceed_max:
+                merged_sections.append(current_chunk)
+                current_chunk = sec
+                continue
+
+            # 执行合并：更新当前块内容
+            current_chunk["content"] = merged_content
+            # 同步序号信息（可选，用于溯源
+            if "part" in sec:
+                current_chunk["part"] = sec["part"]
+        # ===================== 不满足合并条件：直接保存当前块 =====================
+        else:
+            merged_sections.append(current_chunk)
+            current_chunk = sec
+
+    # 返回合并完成的规整块列表
+    return merged_sections
 
 
 def _split_long_section(
@@ -167,7 +280,7 @@ def split_by_titles(md_content:str, file_title:str) -> list[dict]:
 
 
 @step_log("load_markdown_content")
-def load_markdown_content(state: dict) -> tuple[str, str]:
+def load_markdown_content(state: ImportGraphState) -> tuple[str, str]:
     """
         从状态字典中安全加载 Markdown 内容和文档标题
         1. 优先从 state 中直接读取
@@ -186,7 +299,7 @@ def load_markdown_content(state: dict) -> tuple[str, str]:
         logger.warning("没有从state读取到md_content内容,我们使用md_path尝试再次读取!")
         # 如果文件路径存在，则读取文件内容
         if md_path:
-            md_content = md_path.read_text(encoding="utf-8")
+            md_content = Path(md_path).read_text(encoding="utf-8")
             state["md_content"] = md_content
 
         # 双重校验：仍然无内容，抛出异常，终止流程
@@ -223,6 +336,12 @@ def split_document(state: ImportGraphState) -> ImportGraphState:
         """
     # 1. 从状态中加载【增强后的Markdown内容】和【文档标题】
     md_content, file_title = load_markdown_content(state)
+    # 2. 按 Markdown 标题（#、##、###）进行【智能语义切块】（保持段落完整性）
+    chunks = split_by_titles(md_content, file_title)
+    # 切长合短
+    chunks = refine_chunks(chunks, max_len=CHUNK_MAX_SIZE, min_len=CHUNK_SIZE)
+    # 备份
+    backup_chunks(chunks, md_path=state.get("md_path"))
 
-
+    state["chunks"] = chunks
     return state
