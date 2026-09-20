@@ -16,3 +16,12 @@ PDF_PARSE_SERVICE_LOCAL_DIR = "output"
 
 # 加在 EMBEDDING_BATCH_SIZE 附近
 SUPPORTED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"}
+
+# 文本切块最大长度，单个文本最多包含1000个字符（防止过长导致向量失真）
+CHUNK_MAX_SIZE = 1000
+
+# 文本切块最大长度，单个文本最多包含1000个字符，（防止过长导致向量失真）
+CHUNK_SIZE = 600
+
+# 文本块重叠长度：相邻块之间重叠20个字符，保证语义不被切断，上下文连贯
+CHUNK_OVERLAP = 50
