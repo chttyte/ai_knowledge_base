@@ -1,7 +1,8 @@
-from app.shared.runtime.logger import node_log
+from app.shared.runtime.logger import node_log, logger
 from app.shared.utils.task_utils import add_done_task, add_running_task
 from app.process.import_.agent.state import ImportGraphState
 from app.rag.import_.item_name_service import recognize_and_index_item_name
+
 
 @node_log("node_item_name_recognition")
 def node_item_name_recognition(state: ImportGraphState) -> ImportGraphState:

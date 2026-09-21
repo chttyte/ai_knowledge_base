@@ -21,4 +21,10 @@ class LLMProvider:
         """
         return get_llm_client(model=infra_config.llm.lv_model)
 
+    def embedding_model(self):
+        return get_bge_m3_ef()
+
+    def embed_document(self, texts: list[str]) -> dict:
+        return generate_embeddings(texts)
+
 llm_provider = LLMProvider()

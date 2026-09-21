@@ -13,8 +13,8 @@ _bge_m3_ef: BGEM3EmbeddingFunction | None = None
 
 def get_bge_m3_ef() -> BGEM3EmbeddingFunction:
     """
-    获取BGE-M3模型单例对象，自动加载环境变量配置
-    :return: 初始化完成的BGEM3EmbeddingFunction实例
+    获取BGE-M3 模型单例对象，自动加载环境变量配置
+    :return: 初始化完成的bgem3EmbeddingFunction实例
     """
     global _bge_m3_ef
     # 单例模式：已初始化则直接返回，避免重复加载模型
