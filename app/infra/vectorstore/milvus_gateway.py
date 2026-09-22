@@ -3,8 +3,8 @@ from app.shared.clients import get_milvus_client
 
 class MilvusGateway:
     @property
-    def chunk_collection_name(self):
-        return infra_config.milvus.chunk_collection_name
+    def chunks_collection(self) -> str:
+        return infra_config.milvus.chunks_collection
 
     @property
     def item_name_collection(self) -> str:

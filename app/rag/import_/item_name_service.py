@@ -51,7 +51,7 @@ def upsert_item_name(
         collection_name=milvus_gateway.item_name_collection,
         data=[
             {
-                "file_name": file_title,
+                "file_title": file_title,
                 "item_name": item_name,
                 "dense_vector": dense_vector,
                 "sparse_vector": sparse_vector,
@@ -88,9 +88,9 @@ def prepare_item_name_collection()->None:
     schema.add_field(field_name='file_title', datatype=DataType.VARCHAR,
                      max_length=MILVUS_DEFAULT_VARCHAR_MAX_LENGTH)
     schema.add_field(field_name='item_name', datatype=DataType.VARCHAR,
-                     dim=MILVUS_VECTOR_DIM)
-    schema.add_field(field_name='dense_vector', datatype=DataType.FLOAT_VECTOR)
-    schema.add_field(field_name='sparse_vector', datatype=DataType.FLOAT_VECTOR)
+                     max_length=MILVUS_DEFAULT_VARCHAR_MAX_LENGTH)
+    schema.add_field(field_name='dense_vector', datatype=DataType.FLOAT_VECTOR, dim=MILVUS_VECTOR_DIM)
+    schema.add_field(field_name='sparse_vector', datatype=DataType.SPARSE_FLOAT_VECTOR)
 
     # ===================== 创建索引 =====================
     # 准备索引参数
@@ -107,7 +107,7 @@ def prepare_item_name_collection()->None:
     # 为稀疏向量创建索引：使用 SPARSE_INVERTED_INDEX，算法为 DAAT_MAXSCORE
     index_params.add_index(
         field_name='sparse_vector',
-        index_type="SPARESE_INVERTED_INDEX",
+        index_type="SPARSE_INVERTED_INDEX",
         index_name="sparse_vector_index",
         metric_type="IP",
         params={"inverted_index_algo": "DAAT_MAXSCORE"},
