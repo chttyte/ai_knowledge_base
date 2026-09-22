@@ -51,7 +51,8 @@ def embed_chunks(chunks: list[dict], *, step: int = EMBEDDING_BATCH_SIZE)->list[
         except Exception as e:
             # ===================== 异常处理 =====================
             # 捕获异常，记录警告信息并跳过当前批次
-            logger.warning(f"index={index}步骤,发生错误,跳过,继续生成向量!!,错误信息:{str(exc)}")
+
+            logger.warning(f"index={index}步骤,发生错误,跳过,继续生成向量!!,错误信息:{str(e)}")
             # 跳过当前批次，继续处理下一批次，保证整体流程不中断
             continue
     return  chunks_vector

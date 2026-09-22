@@ -1,6 +1,5 @@
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.output_parsers import StrOutputParser
-from mcp.server.fastmcp.prompts.base import UserMessage
 from pymilvus import MilvusClient, DataType
 
 from app.infra.llm.providers import llm_provider
@@ -35,6 +34,7 @@ def upsert_item_name(
     # 确保集合已创建
     prepare_item_name_collection()
 
+
     # 对 item_name 进行转义处理，防止特殊字符导致注入攻击
     safe_item_name = escape_milvus_string(item_name)
 
@@ -42,7 +42,7 @@ def upsert_item_name(
     # 先删除已存在的相同 item_name 记录，保证幂等性
     milvus_client.delete(
         collection_name=milvus_gateway.item_name_collection,
-        filter=f"itme_name == '{safe_item_name}'",
+        filter=f"item_name == '{safe_item_name}'",
     )
 
     # ===================== 插入新记录 =====================
@@ -60,7 +60,7 @@ def upsert_item_name(
     )
 
 
-@step_log("prepare_item_name")
+@step_log("prepare_item_name_collection")
 def prepare_item_name_collection()->None:
     """
        准备 Milvus 主体名称集合
@@ -68,7 +68,7 @@ def prepare_item_name_collection()->None:
        :return: 无返回值
     """
     # 获取 Milvus 客户端
-    milvus_client = MilvusClient()
+    milvus_client = milvus_gateway.client()
 
     # 获取集合名称（从配置中读取）
     collection_name = milvus_gateway.item_name_collection
@@ -119,14 +119,9 @@ def prepare_item_name_collection()->None:
 
 
 
-
-
-
-
-
 @step_log("embed_item_name")
 def embed_item_name(item_name:str) -> tuple[list[float], dict[int, float]]:
-    result = llm_provider.embed_item_name([item_name])
+    result = llm_provider.embed_document([item_name])
     # 提取第一个（也是唯一一个）文本的稠密向量和稀疏向量
     # dense: list[float] - 长度为 1024 的浮点数列表
     # sparse: dict[int, float] - {特征索引: 权重} 的字典
@@ -168,8 +163,8 @@ def recognize_item_name(context: str, file_title: str) -> str:
                                   file_title=file_title,
                                   context=context)
     messages = [
-        SystemMessage(system_prompt_str),
-        UserMessage(user_prompt_str),
+        SystemMessage(content=system_prompt_str),
+        HumanMessage(content=user_prompt_str),
     ]
 
     item_name = (llm | StrOutputParser()).invoke(messages)
@@ -235,4 +230,13 @@ def recognize_and_index_item_name(state: ImportGraphState) -> ImportGraphState:
     3. 将 item_name 回填到 state 和 chunks
     4. 同步写入主体名称索引
     """
+    chunks, file_title = validate_chunks_and_title(state)
+    context = build_document_context(chunks)
+    item_name = recognize_item_name(context, file_title)
+
+    state["item_name"] = item_name
+    state["chunks"] = apply_item_name(chunks, item_name)
+    dense_vector, sparse_vector = embed_item_name(item_name)
+    upsert_item_name(item_name, file_title, dense_vector, sparse_vector)
+
     return state
