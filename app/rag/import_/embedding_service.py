@@ -42,7 +42,7 @@ def embed_chunks(chunks: list[dict], *, step: int = EMBEDDING_BATCH_SIZE)->list[
 
             # ===================== 绑定向量字段 =====================
             # 为当前批次每个切片绑定对应向量，复制原数据避免修改上游源数据
-            for i, chunk in enumerate(result):
+            for i, chunk in enumerate(step_chunks):
                 chunk_new = chunk.copy()
                 chunk_new["dense_vector"] = result["dense"][i]
                 chunk_new["sparse_vector"] = result["sparse"][i]
@@ -74,4 +74,5 @@ def generate_chunk_embeddings(state: ImportGraphState) -> ImportGraphState:
     2. 生成 dense_vector / sparse_vector
     3. 将向量结果补充回 chunks
     """
+    state["chunks"] =  embed_chunks(require_chunks(state))
     return state

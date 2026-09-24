@@ -1,6 +1,6 @@
 import shutil
 from os import PathLike
-from urllib import request
+from urllib import request, response
 
 import requests
 import time
@@ -13,7 +13,7 @@ from app.process.import_.agent.state import ImportGraphState
 from pathlib import Path
 
 from app.rag.import_.config import PDF_PARSE_SERVICE_LOCAL_DIR, MINERU_MODEL_VERSION, MINERU_POLL_TIMEOUT_SECONDS, \
-    MINERU_POLL_INTERVAL_SECONDS
+    MINERU_POLL_INTERVAL_SECONDS, MINERU_DOWNLOAD_TIMEOUT_SECONDS
 from app.shared.runtime.logger import logger, PROJECT_ROOT
 from app.infra.config.providers import infra_config
 
@@ -170,12 +170,45 @@ def download_and_extract_markdown(zip_url:str, local_dir_obj:Path , file_name:st
     :param file_name:
     :return:
     """
-    # 1. 下载（3次重试）
-    response = requests.get(url=zip_url, timeout=MINERU_POLL_TIMEOUT_SECONDS)
-    # 文件服务器，只需检查status_code
-    if response.status_code != 200:
-        logger.error(f"向指定地址：{zip_url}下载zip文件报错，状态码：{response.status_code}"
-                     f"业务无法继续进行！")
+    # 1. 下载（最多重试 3 次）
+    MAX_DOWNLOAD_RETRY = 3
+    RETRY_INTERVAL_SECONDS = 2
+
+    response = None
+    last_error = ""
+    # 第 1 轮是首次尝试，后面 MAX_DOWNLOAD_RETRY 轮是重试
+    for attempt in range(MAX_DOWNLOAD_RETRY + 1):
+        try:
+            resp = requests.get(url=zip_url, timeout=MINERU_DOWNLOAD_TIMEOUT_SECONDS)
+        except requests.RequestException as e:
+            # 网络层失败（DNS/TLS/超时/连接被切断）是抛异常，不是返回假值
+            last_error = f"{type(e).__name__}: {e}"
+            logger.warning(f"下载失败({attempt + 1}/{MAX_DOWNLOAD_RETRY + 1})：{last_error}")
+        else:
+            if resp.status_code == 200:
+                response = resp
+                break
+            last_error = f"HTTP {resp.status_code}"
+            # 4xx 是客户端错误（地址错、没权限），重试多少次结果都一样，直接断
+            if resp.status_code < 500:
+                logger.error(f"下载地址返回 HTTP {resp.status_code}，客户端错误，重试无意义，终止！")
+                raise RuntimeError(f"下载 zip 失败：HTTP {resp.status_code}, url={zip_url}")
+            logger.warning(f"下载失败({attempt + 1}/{MAX_DOWNLOAD_RETRY + 1})：{last_error}")
+
+        # 还有重试机会才等，最后一次失败不用白等
+        if attempt < MAX_DOWNLOAD_RETRY:
+            time.sleep(RETRY_INTERVAL_SECONDS)
+
+    # 重试用完还没拿到：必须在这里断掉，不能带着未定义的 response 往下走
+    if response is None:
+        raise RuntimeError(
+            f"下载 zip 连续失败 {MAX_DOWNLOAD_RETRY + 1} 次（最后一次：{last_error}），终止！url={zip_url}"
+        )
+
+
+
+
+
     #准备zip文件对象
     zip_path_obj:Path = local_dir_obj / f"{file_name}.zip"
     """
@@ -239,6 +272,6 @@ def parse_pdf_to_markdown(state: ImportGraphState) -> ImportGraphState:
     # 3. 根据zip_url下载并解压md文件
     md_path_obj: Path = download_and_extract_markdown(zip_url, local_dir_obj, pdf_path_obj.stem)
     state['md_path'] = str(md_path_obj)
-    state['md_content'] = md_path_obj.read_text()
+    state['md_content'] = md_path_obj.read_text(encoding="utf-8")
     state['local_dir'] = str(local_dir_obj)
     return state

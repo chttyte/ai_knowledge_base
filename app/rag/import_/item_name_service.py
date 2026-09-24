@@ -99,9 +99,13 @@ def prepare_item_name_collection()->None:
     # 为稠密向量创建索引：使用 autoindex，metric_type 为 IP（内积）
     index_params.add_index(
         field_name='dense_vector',
-        index_type="AUTOINDEX",
+        index_type="HNSW",
         index_name="dense_vector_index",
-        metric_type="IP",
+        metric_type="COSINE",
+        params={
+            "M": 64,
+            "efConstruction": 100,
+        }
     )
 
     # 为稀疏向量创建索引：使用 SPARSE_INVERTED_INDEX，算法为 DAAT_MAXSCORE
