@@ -1,0 +1,1 @@
+from app.shared.config.settings_config import settings

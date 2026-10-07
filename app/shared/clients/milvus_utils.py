@@ -114,3 +114,15 @@ def hybrid_search(client, collection_name, reqs, ranker_weights=(0.5, 0.5), norm
     except Exception as e:
         logger.error(f"Milvus混合搜索执行失败，集合[{collection_name}]：{str(e)}", exc_info=True)
         return None
+
+if __name__ == "__main__":
+    # test/probe_hybrid.py（或者塞进你已有的 test 脚本里）
+    from app.infra.llm.providers import llm_provider
+    from app.infra.vectorstore.milvus_gateway import milvus_gateway as g
+
+    v = llm_provider.embed_document(['HAK 180 烫金机'])
+    reqs = g.create_requests(v['dense'][0], v['sparse'][0])
+    resp = g.hybrid_search(collection_name=g.item_name_collection, reqs=reqs,
+                           ranker_weights=(0.5, 0.5), norm_score=True,
+                           output_fields=['item_name'])
+    print(type(resp))  # ← 断点打在这里

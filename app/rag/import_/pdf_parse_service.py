@@ -47,6 +47,11 @@ def validate_pdf_paths(state: ImportGraphState) -> tuple[Path, Path]:
     return pdf_path_obj, local_dir_obj
 
 def upload_pdf_and_poll(pdf_path_obj: Path) -> str:
+
+    import fitz
+    pages = fitz.open(pdf_path_obj).page_count
+    if pages > 200:
+        raise ValueError(f"该 PDF 共 {pages} 页，超过 MinerU 的 200 页上限，请拆分后导入")
     header = {
         "Content-Type": "application/json",
         # .env配置文件 -> infra /config / providers / minerU

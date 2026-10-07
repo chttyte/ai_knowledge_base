@@ -27,4 +27,7 @@ class LLMProvider:
     def embed_document(self, texts: list[str]) -> dict:
         return generate_embeddings(texts)
 
+    def reranker_model(self):
+        return get_reranker_model()
+
 llm_provider = LLMProvider()

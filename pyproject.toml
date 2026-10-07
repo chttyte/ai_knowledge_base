@@ -34,6 +34,7 @@ dependencies = [
     "requests>=2.32.5",
     "langchain-mcp-adapters>=0.2.2",
     "dashscope>=1.25.17",
+    "ipykernel>=7.3.0",
 ]
 # 使用官方 PyPI，避免第三方镜像中的包文件过期或返回 403。
 [[tool.uv.index]]

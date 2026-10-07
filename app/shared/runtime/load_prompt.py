@@ -1,7 +1,6 @@
 from app.shared.runtime.logger import logger, PROJECT_ROOT
 
 
-
 def load_prompt(name: str, **kwargs) -> str:
     """
     加载提示词并渲染变量占位符
